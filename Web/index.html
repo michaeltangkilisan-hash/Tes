@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistem Pendeteksi Mata – Versi Browser</title>
+    <!-- CSS yang sama dengan versi Flask -->
+    <link rel="stylesheet" href="static/style.css" />
+    <style>
+      .video-section {
+        margin-top: 24px;
+      }
+      .video-controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .video-controls .btn-primary {
+        width: auto;
+        min-width: 140px;
+      }
+      #status {
+        margin-top: 10px;
+      }
+      #video-wrapper {
+        margin-top: 14px;
+        display: flex;
+        justify-content: center;
+      }
+      #output {
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.6);
+        max-width: 100%;
+      }
+      .small-label {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        margin-top: 6px;
+      }
+      #brightness-group {
+        margin-top: 8px;
+      }
+      #info-box {
+        margin-top: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-wrapper">
+      <div class="card">
+        <h1 class="title">Sistem Pendeteksi Mata</h1>
+        <p class="subtitle">
+          Aplikasi pendeteksi kondisi mata berbasis pengolahan citra digital
+          yang berjalan langsung di browser (tanpa Python).
+        </p>
+
+        <!-- FORM KONFIGURASI (mirip Flask) -->
+        <form id="config-form" class="form" onsubmit="return false;">
+          <div class="form-group">
+            <label>Apakah Anda memakai kacamata?</label>
+            <div class="options">
+              <label class="option">
+                <input
+                  type="radio"
+                  name="kacamata"
+                  value="tidak"
+                  checked
+                  required
+                />
+                <span>Tidak</span>
+              </label>
+              <label class="option">
+                <input type="radio" name="kacamata" value="ya" />
+                <span>Ya</span>
+              </label>
+            </div>
+            <p
+              id="kacamata-warning"
+              class="hint"
+              style="display: none; margin-top: 6px"
+            >
+              Peringatan: Jika Anda memakai kacamata, hindari lensa yang terlalu
+              gelap karena dapat menurunkan akurasi deteksi sistem.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label>Berapa jumlah mata yang ingin dideteksi?</label>
+            <div class="options">
+              <label class="option">
+                <input
+                  type="radio"
+                  name="mata"
+                  value="2"
+                  checked
+                  required
+                />
+                <span>2 Mata</span>
+              </label>
+              <label class="option">
+                <input type="radio" name="mata" value="1" />
+                <span>1 Mata</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Pilih mode tampilan kamera:</label>
+            <div class="options">
+              <label class="option">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="1"
+                  checked
+                />
+                <span>Berwarna (RGB)</span>
+              </label>
+              <label class="option">
+                <input type="radio" name="mode" value="2" />
+                <span>Keabuan (Grayscale Manual)</span>
+              </label>
+            </div>
+            <div id="brightness-group" style="display:none;">
+              <div class="small-label">
+                Kecerahan (hanya untuk mode keabuan):
+                <span id="brightness-value">100%</span>
+              </div>
+              <input
+                type="range"
+                id="brightness"
+                min="50"
+                max="200"
+                value="100"
+              />
+            </div>
+          </div>
+        </form>
+
+        <div class="message-box" id="info-box">
+          Atur konfigurasi di atas, lalu tekan tombol
+          <strong>Mulai Deteksi</strong>.
+        </div>
+
+        <p class="hint">
+          Catatan: Setelah menekan tombol, browser akan meminta izin kamera.
+          Izinkan akses kamera, lalu lihat ke arah kamera. Klik tombol
+          <strong>Hentikan</strong> untuk berhenti.
+        </p>
+
+        <!-- BAGIAN VIDEO / DETEKSI -->
+        <div class="video-section">
+          <div class="video-controls">
+            <button type="button" class="btn-primary" id="startBtn">
+              Mulai Deteksi
+            </button>
+            <button
+              type="button"
+              class="btn-primary"
+              id="stopBtn"
+              disabled
+            >
+              Hentikan
+            </button>
+          </div>
+          <p class="hint" id="status">Status: belum mulai</p>
+
+          <div id="video-wrapper">
+            <video id="video" playsinline style="display: none;"></video>
+            <canvas id="output" width="640" height="480"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio alarm (gunakan alarm.mp3 yang sama) -->
+    <audio id="alarmAudio" src="alarm.mp3" preload="auto"></audio>
+
+    <!-- MediaPipe JS (FaceMesh + Camera utils) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+
+    <script>
+      // ====== UI KONFIGURASI (kacamata, mata, mode) ======
+      const radiosKacamata = document.querySelectorAll('input[name="kacamata"]');
+      const radiosMata = document.querySelectorAll('input[name="mata"]');
+      const radiosMode = document.querySelectorAll('input[name="mode"]');
+      const kacamataWarning = document.getElementById("kacamata-warning");
+      const brightnessGroup = document.getElementById("brightness-group");
+      const brightnessInput = document.getElementById("brightness");
+      const brightnessValue = document.getElementById("brightness-value");
+      const infoBox = document.getElementById("info-box");
+
+      let kacamataValue = "tidak";
+      let mataMode = "2";
+      let modeKamera = "1";
+      let brightness = 100;
+
+      function updateKacamataWarning() {
+        const selected = document.querySelector('input[name="kacamata"]:checked');
+        if (!selected) return;
+        kacamataValue = selected.value;
+        if (kacamataValue === "ya") {
+          kacamataWarning.style.display = "block";
+        } else {
+          kacamataWarning.style.display = "none";
+        }
+      }
+
+      function updateMataMode() {
+        const selected = document.querySelector('input[name="mata"]:checked');
+        if (!selected) return;
+        mataMode = selected.value; // "1" atau "2"
+      }
+
+      function updateModeKamera() {
+        const selected = document.querySelector('input[name="mode"]:checked');
+        if (!selected) return;
+        modeKamera = selected.value; // "1" atau "2"
+        if (modeKamera === "2") {
+          brightnessGroup.style.display = "block";
+        } else {
+          brightnessGroup.style.display = "none";
+        }
+      }
+
+      function updateBrightness() {
+        brightness = parseInt(brightnessInput.value, 10);
+        brightnessValue.textContent = brightness + "%";
+      }
+
+      radiosKacamata.forEach((r) =>
+        r.addEventListener("change", updateKacamataWarning)
+      );
+      radiosMata.forEach((r) => r.addEventListener("change", updateMataMode));
+      radiosMode.forEach((r) => r.addEventListener("change", updateModeKamera));
+      brightnessInput.addEventListener("input", updateBrightness);
+
+      // set initial UI state
+      updateKacamataWarning();
+      updateMataMode();
+      updateModeKamera();
+      updateBrightness();
+
+      function buildStartMessage() {
+        let mataText =
+          mataMode === "1"
+            ? "Sistem dikonfigurasi untuk mendeteksi 1 mata (kiri atau kanan). "
+            : "Sistem dikonfigurasi untuk mendeteksi 2 mata sekaligus. ";
+
+        let kacamataText = "";
+        if (kacamataValue === "ya") {
+          kacamataText =
+            "Catatan: Anda memilih memakai kacamata. " +
+            "Hindari kacamata dengan lensa terlalu gelap karena dapat menurunkan akurasi deteksi. ";
+        }
+
+        let modeText =
+          modeKamera === "1"
+            ? "Mode tampilan: Berwarna (RGB). "
+            : "Mode tampilan: Keabuan (Grayscale Manual). ";
+
+        infoBox.textContent =
+          "Sistem pendeteksi mata sedang dijalankan. " +
+          "Izinkan akses kamera di browser, lalu lihat ke arah kamera. " +
+          mataText +
+          kacamataText +
+          modeText;
+      }
+
+      // ====== LOGIKA DETEKSI (MediaPipe + EAR) ======
+      const LEFT_EYE_IDX = [33, 160, 158, 133, 153, 144];
+      const RIGHT_EYE_IDX = [362, 385, 387, 263, 373, 380];
+      const EAR_THRESHOLD = 0.22;
+      const SLEEP_TIME_THRESHOLD = 3.0; // detik
+
+      let startClosedTime = null;
+      let alarmPlayed = false;
+
+      function euclidean(a, b) {
+        const dx = a[0] - b[0];
+        const dy = a[1] - b[1];
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function eyeAspectRatio(landmarks, idxs) {
+        const pts = idxs.map((i) => {
+          const lm = landmarks[i];
+          return [lm.x, lm.y]; // normalisasi [0..1]
+        });
+        const [p1, p2, p3, p4, p5, p6] = pts;
+        const vertical1 = euclidean(p2, p6);
+        const vertical2 = euclidean(p3, p5);
+        const horizontal = euclidean(p1, p4);
+        if (horizontal === 0) return 0;
+        return (vertical1 + vertical2) / (2.0 * horizontal);
+      }
+
+      function playAlarm() {
+        const audio = document.getElementById("alarmAudio");
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+          console.log("Tidak bisa memutar audio (mungkin diblokir browser).");
+        });
+      }
+
+      const videoElement = document.getElementById("video");
+      const canvasElement = document.getElementById("output");
+      const canvasCtx = canvasElement.getContext("2d");
+      const statusEl = document.getElementById("status");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+
+      let camera = null;
+      let faceMesh = null;
+      let faceMeshReady = false;
+
+      function setStatus(text, color = "#9ca3af") {
+        statusEl.textContent = "Status: " + text;
+        statusEl.style.color = color;
+      }
+
+      function applyGrayscaleAndBrightness() {
+        const w = canvasElement.width;
+        const h = canvasElement.height;
+        const frame = canvasCtx.getImageData(0, 0, w, h);
+        const data = frame.data;
+        const factor = brightness / 100.0;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          gray = Math.min(255, gray * factor);
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+        canvasCtx.putImageData(frame, 0, 0);
+      }
+
+      function onResults(results) {
+        const w = canvasElement.width;
+        const h = canvasElement.height;
+
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, w, h);
+
+        // Gambar frame kamera
+        canvasCtx.drawImage(results.image, 0, 0, w, h);
+
+        // Jika mode grayscale, ubah tampilan ke abu-abu + brightness
+        if (modeKamera === "2") {
+          applyGrayscaleAndBrightness();
+        }
+
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+          const landmarks = results.multiFaceLandmarks[0];
+
+          const leftEAR = eyeAspectRatio(landmarks, LEFT_EYE_IDX);
+          const rightEAR = eyeAspectRatio(landmarks, RIGHT_EYE_IDX);
+
+          let ear, eyeLabel, indicesToDraw;
+
+          if (mataMode === "1") {
+            if (leftEAR >= rightEAR) {
+              ear = leftEAR;
+              eyeLabel = "Mata Kiri";
+              indicesToDraw = LEFT_EYE_IDX;
+            } else {
+              ear = rightEAR;
+              eyeLabel = "Mata Kanan";
+              indicesToDraw = RIGHT_EYE_IDX;
+            }
+          } else {
+            ear = (leftEAR + rightEAR) / 2.0;
+            eyeLabel = "2 Mata";
+            indicesToDraw = LEFT_EYE_IDX.concat(RIGHT_EYE_IDX);
+          }
+
+          // gambar titik mata
+          canvasCtx.fillStyle = "lime";
+          indicesToDraw.forEach((idx) => {
+            const lm = landmarks[idx];
+            const x = lm.x * w;
+            const y = lm.y * h;
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 2, 0, 2 * Math.PI);
+            canvasCtx.fill();
+          });
+
+          // logika EAR dan alarm
+          if (ear < EAR_THRESHOLD) {
+            if (startClosedTime === null) {
+              startClosedTime = performance.now() / 1000.0;
+            }
+            const elapsed = performance.now() / 1000.0 - startClosedTime;
+            if (elapsed >= SLEEP_TIME_THRESHOLD && !alarmPlayed) {
+              canvasCtx.fillStyle = "red";
+              canvasCtx.font = "24px Arial";
+              canvasCtx.fillText(
+                "!!! MATA TERTUTUP TERDETEKSI !!!",
+                50,
+                80
+              );
+              playAlarm();
+              alarmPlayed = true;
+            }
+          } else {
+            startClosedTime = null;
+            alarmPlayed = false;
+          }
+
+          // EAR text
+          canvasCtx.font = "18px Arial";
+          canvasCtx.fillStyle = ear >= EAR_THRESHOLD ? "lime" : "red";
+          canvasCtx.fillText(
+            `EAR (${eyeLabel}): ${ear.toFixed(3)}`,
+            10,
+            30
+          );
+
+          // Info mode + jenis deteksi di bawah
+          const deteksiText =
+            mataMode === "1" ? "1 Mata (kiri/kanan)" : "2 Mata";
+          const modeText =
+            modeKamera === "1" ? "Berwarna" : "Keabuan Manual";
+          canvasCtx.font = "16px Arial";
+          canvasCtx.fillStyle = "white";
+          canvasCtx.fillText(
+            `Mode: ${modeText} | Deteksi: ${deteksiText}`,
+            10,
+            h - 20
+          );
+        } else {
+          startClosedTime = null;
+          alarmPlayed = false;
+        }
+
+        canvasCtx.restore();
+      }
+
+      async function initFaceMesh() {
+        if (faceMeshReady) return;
+        faceMesh = new FaceMesh.FaceMesh({
+          locateFile: (file) =>
+            `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+        });
+        faceMesh.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+        faceMesh.onResults(onResults);
+        faceMeshReady = true;
+      }
+
+      async function startDetection() {
+        await initFaceMesh();
+        buildStartMessage();
+        setStatus("meminta akses kamera...", "#fbbf24");
+
+        if (camera) {
+          // sudah jalan
+          return;
+        }
+
+        camera = new Camera.Camera(videoElement, {
+          onFrame: async () => {
+            await faceMesh.send({ image: videoElement });
+          },
+          width: 640,
+          height: 480,
+        });
+
+        try {
+          await camera.start();
+          setStatus("deteksi berjalan", "#22c55e");
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+        } catch (e) {
+          console.error(e);
+          setStatus(
+            "gagal mengakses kamera (cek izin browser & device)",
+            "#f87171"
+          );
+          camera = null;
+        }
+      }
+
+      function stopDetection() {
+        if (camera) {
+          camera.stop();
+          camera = null;
+        }
+        startClosedTime = null;
+        alarmPlayed = false;
+        setStatus("berhenti", "#9ca3af");
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      startBtn.addEventListener("click", startDetection);
+      stopBtn.addEventListener("click", stopDetection);
+    </script>
+  </body>
+</html>
