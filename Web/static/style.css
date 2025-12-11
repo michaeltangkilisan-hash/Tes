@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  background: radial-gradient(circle at top left, #4f46e5, #0f172a 55%, #020617);
+  color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-wrapper {
+  width: 100%;
+  max-width: 900px;
+  padding: 24px;
+}
+
+.card {
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 18px;
+  padding: 32px 28px 28px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  backdrop-filter: blur(18px);
+}
+
+.title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #f9fafb;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: #cbd5f5;
+  margin-bottom: 24px;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #e5e7eb;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.75);
+  color: #e5e7eb;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.18s ease;
+}
+
+.option:hover {
+  border-color: #818cf8;
+  background: rgba(30, 64, 175, 0.65);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4);
+}
+
+.option input[type="radio"] {
+  accent-color: #6366f1;
+}
+
+.btn-primary {
+  margin-top: 10px;
+  width: 100%;
+  border: none;
+  border-radius: 999px;
+  padding: 11px 18px;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #f9fafb;
+  background: linear-gradient(90deg, #6366f1, #4f46e5);
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(79, 70, 229, 0.6);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px rgba(79, 70, 229, 0.75);
+  filter: brightness(1.05);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.5);
+}
+
+.message-box {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(15, 118, 110, 0.18);
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: #a5f3fc;
+  font-size: 0.9rem;
+}
+
+.hint {
+  margin-top: 18px;
+  font-size: 0.82rem;
+  color: #9ca3af;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 22px 18px 20px;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+}
